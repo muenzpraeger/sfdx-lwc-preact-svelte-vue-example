@@ -1,0 +1,23 @@
+<template>
+    <lightning-card title="Vue Component" icon-name="standard:account">
+        <div class="slds-p-around_medium">
+            <!-- A Vue property cannot be changed after the Vue component has rendered. Hence we disable the button. -->
+            <lightning-input
+                label="Outer property"
+                onkeyup={handleKeyUp}
+                value={titleValue}
+            ></lightning-input>
+            <lightning-input
+                label="Account Id sent from 3rd party framework event (click account in list below to fire the event)"
+                value={eventValue}
+                disabled
+            ></lightning-input>
+            <!-- div element that is used to attach the 3rd party framework -->
+            <div
+                class="vue"
+                lwc:dom="manual"
+                onsendaccount={handleSendAccount}
+            ></div>
+        </div>
+    </lightning-card>
+</template>

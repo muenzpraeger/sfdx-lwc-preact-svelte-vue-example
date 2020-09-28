@@ -1,0 +1,11 @@
+**/lwc/**/*.css
+**/lwc/**/*.html
+**/lwc/**/*.json
+**/lwc/**/*.svg
+**/lwc/**/*.xml
+.sfdx
+
+# We have to ignore the bundles ESM modules from LWC Linting
+force-app/main/default/lwc/preact/preact.js
+force-app/main/default/lwc/svelte/svelte.js
+force-app/main/default/lwc/vue/vue.js

@@ -1,0 +1,13 @@
+# List files or directories below to ignore them when running prettier
+# More information: https://prettier.io/docs/en/ignore.html
+#
+
+**/staticresources/**
+.localdevserver
+.sfdx
+coverage/
+.vscode
+public/
+force-app/main/default/lwc/preact
+force-app/main/default/lwc/svelte
+force-app/main/default/lwc/vue

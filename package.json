@@ -1,0 +1,76 @@
+{
+    "name": "sfdx-lwc-preact-svelte-vue-example",
+    "private": true,
+    "version": "1.0.0",
+    "description": "Example for showcasing Preact, and Svelte, and Vue within a Salesforce org",
+    "scripts": {
+        "build": "run-p build:preact build:svelte build:vue",
+        "build:preact": "rollup -c scripts/rollup.preact.js",
+        "build:svelte": "rollup -c scripts/rollup.svelte.js",
+        "build:vue": "rollup -c scripts/rollup.vue.js",
+        "dev": "run-p dev:preact dev:svelte dev:vue",
+        "dev:preact": "rollup -c scripts/rollup.preact.js -w",
+        "dev:svelte": "rollup -c scripts/rollup.svelte.js -w",
+        "dev:vue": "rollup -c scripts/rollup.vue.js -w",
+        "lint": "npm run lint:lwc && npm run lint:svelte && npm lint:vue",
+        "lint:lwc": "eslint **/lwc/**",
+        "lint:preact": "eslint src/preact/**",
+        "lint:svelte": "eslint src/svelte/**",
+        "lint:vue": "vue-cli-service lint",
+        "test": "npm run test:lwc:unit",
+        "test:lwc:unit": "sfdx-lwc-jest",
+        "test:lwc:unit:watch": "sfdx-lwc-jest --watch",
+        "test:lwc:unit:debug": "sfdx-lwc-jest --debug",
+        "test:lwc:unit:coverage": "sfdx-lwc-jest --coverage",
+        "prettier": "prettier --write \"**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\"",
+        "prettier:verify": "prettier --list-different \"**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}\""
+    },
+    "devDependencies": {
+        "@prettier/plugin-xml": "^0.12.0",
+        "@rollup/plugin-commonjs": "^15.1.0",
+        "@rollup/plugin-node-resolve": "^9.0.0",
+        "@rollup/plugin-replace": "^2.3.3",
+        "@salesforce/eslint-config-lwc": "^0.7.0",
+        "@salesforce/sfdx-lwc-jest": "^0.9.2",
+        "@vue/cli-plugin-babel": "^4.5.6",
+        "@vue/cli-plugin-eslint": "^4.5.6",
+        "@vue/cli-service": "^4.5.6",
+        "babel-eslint": "^10.1.0",
+        "babel-preset-react": "^6.24.1",
+        "eslint": "^7.9.0",
+        "eslint-config-prettier": "^6.11.0",
+        "eslint-plugin-svelte3": "^2.7.3",
+        "eslint-plugin-vue": "^6.2.2",
+        "husky": "^4.3.0",
+        "lint-staged": "^10.4.0",
+        "npm-run-all": "4.1.5",
+        "preact": "^10.5.2",
+        "preact-render-to-string": "^5.1.10",
+        "prettier": "^2.1.2",
+        "prettier-plugin-apex": "^1.7.0",
+        "rollup": "^2.28.2",
+        "rollup-plugin-babel": "^4.4.0",
+        "rollup-plugin-svelte": "^6.0.1",
+        "rollup-plugin-terser": "^7.0.2",
+        "rollup-plugin-vue": "^5.1.9",
+        "svelte": "^3.27.0",
+        "vue": "^2.6.12",
+        "vue-template-compiler": "^2.6.12"
+    },
+    "husky": {
+        "hooks": {
+            "pre-commit": "lint-staged"
+        }
+    },
+    "lint-staged": {
+        "**/*.{cls,cmp,component,css,html,js,json,md,page,trigger,xml,yaml,yml}": [
+            "prettier --write"
+        ],
+        "**/{aura|lwc|preact|svelte}/**": [
+            "eslint"
+        ],
+        "**/vue/*.vue": [
+            "vue-cli-service lint"
+        ]
+    }
+}

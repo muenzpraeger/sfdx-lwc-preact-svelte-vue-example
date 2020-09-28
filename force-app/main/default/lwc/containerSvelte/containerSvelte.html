@@ -1,0 +1,22 @@
+<template>
+    <lightning-card title="Svelte Component" icon-name="standard:account">
+        <div class="slds-p-around_medium">
+            <lightning-input
+                label="Outer property"
+                onkeyup={handleKeyUp}
+                value={titleValue}
+            ></lightning-input>
+            <lightning-input
+                label="Account Id sent from 3rd party framework event (click account in list below to fire the event)"
+                value={eventValue}
+                disabled
+            ></lightning-input>
+            <!-- div element that is used to attach the 3rd party framework -->
+            <div
+                class="svelte"
+                lwc:dom="manual"
+                onsendaccount={handleSendAccount}
+            ></div>
+        </div>
+    </lightning-card>
+</template>
