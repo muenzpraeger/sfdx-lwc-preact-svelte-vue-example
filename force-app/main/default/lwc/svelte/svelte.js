@@ -19,9 +19,29 @@ function safe_not_equal(a, b) {
 function is_empty(obj) {
     return Object.keys(obj).length === 0;
 }
-
 function append(target, node) {
     target.appendChild(node);
+}
+function append_styles(target, style_sheet_id, styles) {
+    const append_styles_to = get_root_for_style(target);
+    if (!append_styles_to.querySelector(`#${style_sheet_id}`)) {
+        const style = element('style');
+        style.id = style_sheet_id;
+        style.textContent = styles;
+        append_stylesheet(append_styles_to, style);
+    }
+}
+function get_root_for_style(node) {
+    if (!node)
+        return document;
+    const root = node.getRootNode ? node.getRootNode() : node.ownerDocument;
+    if (root && root.host) {
+        return root;
+    }
+    return node.ownerDocument;
+}
+function append_stylesheet(node, style) {
+    append(node.head || node, style);
 }
 function insert(target, node, anchor) {
     target.insertBefore(node, anchor || null);
@@ -62,9 +82,9 @@ function set_data(text, data) {
     if (text.wholeText !== data)
         text.data = data;
 }
-function custom_event(type, detail) {
+function custom_event(type, detail, { bubbles = false, cancelable = false } = {}) {
     const e = document.createEvent('CustomEvent');
-    e.initCustomEvent(type, false, false, detail);
+    e.initCustomEvent(type, bubbles, cancelable, detail);
     return e;
 }
 
@@ -74,7 +94,7 @@ function set_current_component(component) {
 }
 function get_current_component() {
     if (!current_component)
-        throw new Error(`Function called outside component initialization`);
+        throw new Error('Function called outside component initialization');
     return current_component;
 }
 function onMount(fn) {
@@ -82,16 +102,18 @@ function onMount(fn) {
 }
 function createEventDispatcher() {
     const component = get_current_component();
-    return (type, detail) => {
+    return (type, detail, { cancelable = false } = {}) => {
         const callbacks = component.$$.callbacks[type];
         if (callbacks) {
             // TODO are there situations where events could be dispatched
             // in a server (non-DOM) environment?
-            const event = custom_event(type, detail);
+            const event = custom_event(type, detail, { cancelable });
             callbacks.slice().forEach(fn => {
                 fn.call(component, event);
             });
+            return !event.defaultPrevented;
         }
+        return true;
     };
 }
 
@@ -110,22 +132,40 @@ function schedule_update() {
 function add_render_callback(fn) {
     render_callbacks.push(fn);
 }
-let flushing = false;
+// flush() calls callbacks in this order:
+// 1. All beforeUpdate callbacks, in order: parents before children
+// 2. All bind:this callbacks, in reverse order: children before parents.
+// 3. All afterUpdate callbacks, in order: parents before children. EXCEPT
+//    for afterUpdates called during the initial onMount, which are called in
+//    reverse order: children before parents.
+// Since callbacks might update component values, which could trigger another
+// call to flush(), the following steps guard against this:
+// 1. During beforeUpdate, any updated components will be added to the
+//    dirty_components array and will cause a reentrant call to flush(). Because
+//    the flush index is kept outside the function, the reentrant call will pick
+//    up where the earlier call left off and go through all dirty components. The
+//    current_component value is saved and restored so that the reentrant call will
+//    not interfere with the "parent" flush() call.
+// 2. bind:this callbacks cannot trigger new flush() calls.
+// 3. During afterUpdate, any updated components will NOT have their afterUpdate
+//    callback called a second time; the seen_callbacks set, outside the flush()
+//    function, guarantees this behavior.
 const seen_callbacks = new Set();
+let flushidx = 0; // Do *not* move this inside the flush() function
 function flush() {
-    if (flushing)
-        return;
-    flushing = true;
+    const saved_component = current_component;
     do {
         // first, call beforeUpdate functions
         // and update components
-        for (let i = 0; i < dirty_components.length; i += 1) {
-            const component = dirty_components[i];
+        while (flushidx < dirty_components.length) {
+            const component = dirty_components[flushidx];
+            flushidx++;
             set_current_component(component);
             update(component.$$);
         }
         set_current_component(null);
         dirty_components.length = 0;
+        flushidx = 0;
         while (binding_callbacks.length)
             binding_callbacks.pop()();
         // then, once components are updated, call
@@ -145,8 +185,8 @@ function flush() {
         flush_callbacks.pop()();
     }
     update_scheduled = false;
-    flushing = false;
     seen_callbacks.clear();
+    set_current_component(saved_component);
 }
 function update($$) {
     if ($$.fragment !== null) {
@@ -165,22 +205,24 @@ function transition_in(block, local) {
         block.i(local);
     }
 }
-function mount_component(component, target, anchor) {
+function mount_component(component, target, anchor, customElement) {
     const { fragment, on_mount, on_destroy, after_update } = component.$$;
     fragment && fragment.m(target, anchor);
-    // onMount happens before the initial afterUpdate
-    add_render_callback(() => {
-        const new_on_destroy = on_mount.map(run).filter(is_function);
-        if (on_destroy) {
-            on_destroy.push(...new_on_destroy);
-        }
-        else {
-            // Edge case - component was destroyed immediately,
-            // most likely as a result of a binding initialising
-            run_all(new_on_destroy);
-        }
-        component.$$.on_mount = [];
-    });
+    if (!customElement) {
+        // onMount happens before the initial afterUpdate
+        add_render_callback(() => {
+            const new_on_destroy = on_mount.map(run).filter(is_function);
+            if (on_destroy) {
+                on_destroy.push(...new_on_destroy);
+            }
+            else {
+                // Edge case - component was destroyed immediately,
+                // most likely as a result of a binding initialising
+                run_all(new_on_destroy);
+            }
+            component.$$.on_mount = [];
+        });
+    }
     after_update.forEach(add_render_callback);
 }
 function destroy_component(component, detaching) {
@@ -202,10 +244,9 @@ function make_dirty(component, i) {
     }
     component.$$.dirty[(i / 31) | 0] |= (1 << (i % 31));
 }
-function init(component, options, instance, create_fragment, not_equal, props, dirty = [-1]) {
+function init(component, options, instance, create_fragment, not_equal, props, append_styles, dirty = [-1]) {
     const parent_component = current_component;
     set_current_component(component);
-    const prop_values = options.props || {};
     const $$ = component.$$ = {
         fragment: null,
         ctx: null,
@@ -217,17 +258,20 @@ function init(component, options, instance, create_fragment, not_equal, props, d
         // lifecycle
         on_mount: [],
         on_destroy: [],
+        on_disconnect: [],
         before_update: [],
         after_update: [],
-        context: new Map(parent_component ? parent_component.$$.context : []),
+        context: new Map(options.context || (parent_component ? parent_component.$$.context : [])),
         // everything else
         callbacks: blank_object(),
         dirty,
-        skip_bound: false
+        skip_bound: false,
+        root: options.target || parent_component.$$.root
     };
+    append_styles && append_styles($$.root);
     let ready = false;
     $$.ctx = instance
-        ? instance(component, prop_values, (i, ret, ...rest) => {
+        ? instance(component, options.props || {}, (i, ret, ...rest) => {
             const value = rest.length ? rest[0] : ret;
             if ($$.ctx && not_equal($$.ctx[i], $$.ctx[i] = value)) {
                 if (!$$.skip_bound && $$.bound[i])
@@ -256,11 +300,14 @@ function init(component, options, instance, create_fragment, not_equal, props, d
         }
         if (options.intro)
             transition_in(component.$$.fragment);
-        mount_component(component, options.target, options.anchor);
+        mount_component(component, options.target, options.anchor, options.customElement);
         flush();
     }
     set_current_component(parent_component);
 }
+/**
+ * Base class for Svelte components. Used when dev=false.
+ */
 class SvelteComponent {
     $destroy() {
         destroy_component(this, 1);
@@ -284,13 +331,10 @@ class SvelteComponent {
     }
 }
 
-/* src/svelte/App.svelte generated by Svelte v3.28.0 */
+/* src/svelte/App.svelte generated by Svelte v3.48.0 */
 
-function add_css() {
-	var style = element("style");
-	style.id = "svelte-19rjozn-style";
-	style.textContent = "main.svelte-19rjozn{padding:1em;max-width:240px;margin:0 auto}li.svelte-19rjozn{cursor:pointer}@media(min-width: 640px){main.svelte-19rjozn{max-width:none}}";
-	append(document.head, style);
+function add_css(target) {
+	append_styles(target, "svelte-19rjozn", "main.svelte-19rjozn{padding:1em;max-width:240px;margin:0 auto}li.svelte-19rjozn{cursor:pointer}@media(min-width: 640px){main.svelte-19rjozn{max-width:none}}");
 }
 
 function get_each_context(ctx, list, i) {
@@ -442,7 +486,7 @@ function create_fragment(ctx) {
 
 function instance($$self, $$props, $$invalidate) {
 	let { title } = $$props;
-	const dispatch = createEventDispatcher();
+	createEventDispatcher();
 	let el; // We need this el variable to store later the ul ref for event dispatching.
 	let accounts = [];
 
@@ -463,14 +507,14 @@ function instance($$self, $$props, $$invalidate) {
 	}
 
 	function div_binding($$value) {
-		binding_callbacks[$$value ? "unshift" : "push"](() => {
+		binding_callbacks[$$value ? 'unshift' : 'push'](() => {
 			el = $$value;
 			$$invalidate(1, el);
 		});
 	}
 
 	$$self.$$set = $$props => {
-		if ("title" in $$props) $$invalidate(0, title = $$props.title);
+		if ('title' in $$props) $$invalidate(0, title = $$props.title);
 	};
 
 	return [title, el, accounts, sendAccount, div_binding];
@@ -479,8 +523,7 @@ function instance($$self, $$props, $$invalidate) {
 class App extends SvelteComponent {
 	constructor(options) {
 		super();
-		if (!document.getElementById("svelte-19rjozn-style")) add_css();
-		init(this, options, instance, create_fragment, safe_not_equal, { title: 0 });
+		init(this, options, instance, create_fragment, safe_not_equal, { title: 0 }, add_css);
 	}
 }
 
@@ -491,4 +534,4 @@ function createApp(target, props) {
     });
 }
 
-export default createApp;
+export { createApp as default };

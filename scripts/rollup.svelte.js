@@ -1,5 +1,6 @@
 import svelte from "rollup-plugin-svelte";
 import resolve from "@rollup/plugin-node-resolve";
+import replace from "rollup-plugin-replace";
 
 const production = !process.env.ROLLUP_WATCH;
 
@@ -13,9 +14,9 @@ export default {
     external: [/@salesforce/, /lightning\//],
     plugins: [
         svelte({
-            // enable run-time checks when not in production
-            dev: !production
+            emitCss: false
         }),
+        HACK_THE_OUTPUT(),
         resolve({
             browser: true,
             dedupe: ["svelte"]
@@ -25,3 +26,17 @@ export default {
         clearScreen: false
     }
 };
+
+function HACK_THE_OUTPUT() {
+    return {
+        renderChunk: (code, chunk, options) => {
+            return {
+                code: code.replace(
+                    "!append_styles_to.getElementById(style_sheet_id)",
+                    "!append_styles_to.querySelector(`#${style_sheet_id}`)"
+                ),
+                map: null
+            };
+        }
+    };
+}
